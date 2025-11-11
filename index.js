@@ -1,22 +1,21 @@
 // =========================
-// MZ Archetype Bot - Based on Helix Version (Buttons, 1-5 Scale)
+// MZ Archetype Bot (60 Q, Buttons 1-5, Webhook)
 // =========================
 
+const fetch = require("node-fetch");
 require("dotenv").config();
+
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
-const path = require("path");
 const questions = require("./questions.json");
 
 // -------------------------
 // BASIC CONFIG
 // -------------------------
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const APP_URL = process.env.APP_URL; // مثل: https://mz-archetype-bot.onrender.com
+const APP_URL = process.env.APP_URL; // مثلا: https://mz-archetype-bot.onrender.com
 const PORT = process.env.PORT || 3000;
-
-// تصویر شروع (داخل پروژه)
-const START_IMAGE_PATH = path.join(__dirname, "assets", "start_image.jpg");
+const START_IMAGE_URL = process.env.START_IMAGE_URL || "";
 
 if (!BOT_TOKEN) {
   console.error("❌ BOT_TOKEN is missing.");
@@ -72,8 +71,8 @@ const archetypeDescriptions = {
     "خودمانی، واقعی و بی‌ادعا هستی. برایت مهم است که بخشی از یک جمع اصیل و صمیمی باشی.",
 };
 
-// 60 سؤال، 12 آرکتایپ، هرکدام 5 سؤال
-const TOTAL_QUESTIONS = questions.length; // 60
+// الان 60 سوال (12 آرکتایپ × 5 سوال)
+const TOTAL_QUESTIONS = questions.length;
 const QUESTIONS_PER_ARCHETYPE = TOTAL_QUESTIONS / archetypes.length; // 5
 const MAX_SCORE_PER_QUESTION = 5;
 const MAX_SCORE_PER_ARCHETYPE = QUESTIONS_PER_ARCHETYPE * MAX_SCORE_PER_QUESTION;
@@ -81,6 +80,7 @@ const MAX_SCORE_PER_ARCHETYPE = QUESTIONS_PER_ARCHETYPE * MAX_SCORE_PER_QUESTION
 // -------------------------
 // STATE
 // -------------------------
+
 // userId → { order, currentIndex, scores{key}, finished, name }
 const userState = new Map();
 
@@ -88,7 +88,6 @@ const userState = new Map();
 // HELPERS
 // -------------------------
 
-// ساخت آرایه رندوم 1..N
 function createShuffledQuestions() {
   const arr = [];
   for (let i = 1; i <= TOTAL_QUESTIONS; i++) arr.push(i);
@@ -99,7 +98,6 @@ function createShuffledQuestions() {
   return arr;
 }
 
-// بر اساس شماره سؤال، آرکتایپ مربوطه
 function getArchetypeKeyForQuestion(qNumber) {
   if (qNumber < 1 || qNumber > TOTAL_QUESTIONS) return null;
   const index = Math.floor((qNumber - 1) / QUESTIONS_PER_ARCHETYPE); // 0..11
@@ -107,9 +105,8 @@ function getArchetypeKeyForQuestion(qNumber) {
   return archetype ? archetype.key : null;
 }
 
-// ساخت نمودار متنی ساده (0 تا 10 بلوک)
 function makeBar(percent) {
-  const blocks = Math.round(percent / 10); // 0..10
+  const blocks = Math.round(percent / 10);
   const filled = "▓".repeat(blocks);
   const empty = "░".repeat(10 - blocks);
   return filled + empty;
@@ -125,7 +122,6 @@ bot.start(async (ctx) => {
     (ctx.from.first_name || "") +
     (ctx.from.last_name ? " " + ctx.from.last_name : "");
 
-  // آماده‌سازی وضعیت کاربر
   const scores = {};
   archetypes.forEach((a) => (scores[a.key] = 0));
 
@@ -137,12 +133,13 @@ bot.start(async (ctx) => {
     finished: false,
   });
 
-  // ارسال تصویر شروع (در صورت وجود فایل)
-  try {
-    await ctx.replyWithPhoto({ source: START_IMAGE_PATH });
-  } catch (err) {
-    console.error("🚨 Failed to send start image:", err.message || err);
-    // اگر نشد، ادامه می‌دیم بدون تصویر
+  // عکس شروع به‌جای استیکر
+  if (START_IMAGE_URL) {
+    try {
+      await ctx.replyWithPhoto(START_IMAGE_URL);
+    } catch (err) {
+      console.error("🚨 Failed to send start image:", err);
+    }
   }
 
   const intro =
@@ -165,7 +162,6 @@ bot.start(async (ctx) => {
   });
 });
 
-// شروع تست بعد از زدن دکمه
 bot.action("start_quiz", (ctx) => {
   const userId = ctx.from.id;
   const state = userState.get(userId);
@@ -186,7 +182,6 @@ bot.action("start_quiz", (ctx) => {
   sendNextQuestion(ctx);
 });
 
-// هندل انتخاب امتیاز ۱ تا ۵ با دکمه
 bot.action(/^score_([1-5])$/, (ctx) => {
   const userId = ctx.from.id;
   const state = userState.get(userId);
@@ -227,7 +222,6 @@ bot.action(/^score_([1-5])$/, (ctx) => {
   return sendNextQuestion(ctx);
 });
 
-// ارسال سؤال بعدی با دکمه‌ها
 function sendNextQuestion(ctx) {
   const userId = ctx.from.id;
   const state = userState.get(userId);
@@ -255,7 +249,7 @@ function sendNextQuestion(ctx) {
     `${text}\n\n` +
     "یکی از گزینه‌ها رو انتخاب کن 👇";
 
-  return ctx.reply(message, {
+  ctx.reply(message, {
     parse_mode: "HTML",
     ...Markup.inlineKeyboard([
       [
@@ -270,7 +264,7 @@ function sendNextQuestion(ctx) {
 }
 
 // -------------------------
-// RESULTS (با نمودار میله‌ای بدون لوگو)
+// RESULTS (بدون لوگو روی نمودار)
 // -------------------------
 
 async function sendResults(ctx, state) {
@@ -280,7 +274,6 @@ async function sendResults(ctx, state) {
     return { key: a.key, label: a.label, raw, percent };
   });
 
-  // مرتب‌سازی نزولی
   results.sort((a, b) => b.percent - a.percent);
 
   const top3 = results.slice(0, 3);
@@ -319,8 +312,7 @@ async function sendResults(ctx, state) {
 
   await ctx.reply(msg, { parse_mode: "HTML" });
 
-  // ---------- نمودار میله‌ای (بدون لوگو) ----------
-
+  // نمودار میله‌ای بدون لوگو
   const topKeys = new Set(top3.map((r) => r.key));
   const lowKeys = new Set(low3.map((r) => r.key));
 
@@ -328,9 +320,9 @@ async function sendResults(ctx, state) {
   const data = results.map((r) => r.percent);
 
   const backgroundColors = results.map((r) => {
-    if (topKeys.has(r.key)) return "rgba(46, 204, 113, 0.9)"; // سبز - سه غالب
-    if (lowKeys.has(r.key)) return "rgba(231, 76, 60, 0.9)"; // قرمز - سه کم‌فعال‌تر
-    return "rgba(149, 165, 166, 0.85)"; // خاکستری - بقیه
+    if (topKeys.has(r.key)) return "rgba(46, 204, 113, 0.9)"; // سبز
+    if (lowKeys.has(r.key)) return "rgba(231, 76, 60, 0.9)"; // قرمز
+    return "rgba(149, 165, 166, 0.85)"; // خاکستری
   });
 
   const chartConfig = {
@@ -369,9 +361,7 @@ async function sendResults(ctx, state) {
           },
         },
       },
-      legend: {
-        display: false,
-      },
+      legend: { display: false },
       plugins: {
         legend: { display: false },
         title: { display: false },
@@ -431,14 +421,6 @@ app.listen(PORT, async () => {
     console.log("⚠️ APP_URL is not set. Webhook not configured automatically.");
   }
 });
-// اگر APP_URL تنظیم نشده، ربات را در حالت polling برای توسعه لوکال ران می‌کنیم
-if (!APP_URL) {
-  bot.launch()
-    .then(() => console.log("🤖 Bot started in polling mode (local dev)"))
-    .catch((err) => console.error("🚨 Error starting bot in polling mode:", err));
-}
 
-
-// Graceful stop
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
