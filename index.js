@@ -143,7 +143,7 @@ bot.start(async (ctx) => {
   }
 
   const intro =
-    "🧬 <b>MZ Archetype Bot</b>\n" +
+    " <b>MZ Archetype Bot</b>\n" +
     "━━━━━━━━━━━━━━━━━━\n\n" +
     "به تست آرکتایپ خوش اومدی 🌱\n\n" +
     "🔢 <b>نحوه امتیازدهی (۱ تا ۵):</b>\n" +
